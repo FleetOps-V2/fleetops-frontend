@@ -3,6 +3,7 @@ import { AppContext } from '../context/AppContext';
 import { taskAPI, vehicleAPI } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import LoadingSpinner from './LoadingSpinner';
+import { ListTodo } from 'lucide-react';
 
 const TaskDrawer = ({ isOpen, onClose }) => {
   const { state, fetchCartCount } = useContext(AppContext);
@@ -97,7 +98,9 @@ const TaskDrawer = ({ isOpen, onClose }) => {
             <LoadingSpinner />
           ) : !queue || !queue.tasks || queue.tasks.length === 0 ? (
             <div style={{ textAlign: 'center', marginTop: '4rem', color: 'var(--text-muted)' }}>
-              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📋</div>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+                <ListTodo size={48} strokeWidth={1.5} color="var(--text-muted)" />
+              </div>
               <h3>Queue is empty</h3>
               <p className="mt-1">No pending maintenance tasks.</p>
             </div>

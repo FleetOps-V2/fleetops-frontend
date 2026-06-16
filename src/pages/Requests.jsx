@@ -3,6 +3,65 @@ import { requestAPI, vehicleAPI } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
+import { logAudit } from '../utils/AuditLogger';
+import { pushNotification } from '../components/NotificationCenter';
+import { Truck, HardHat } from 'lucide-react';
+
+const StepFunctionsTimeline = ({ currentStatus }) => {
+  const steps = ['OPEN', 'PENDING_APPROVAL', 'APPROVED', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED'];
+  const currentIndex = steps.indexOf(currentStatus);
+  
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', marginTop: '1.25rem', marginBottom: '1.25rem', background: 'rgba(0,0,0,0.15)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>AWS Step Functions State Machine Execution</span>
+        <span className="aws-badge" style={{ fontSize: '0.62rem', background: 'rgba(236,72,153,0.15)', color: '#ec4899', border: '1px solid rgba(236,72,153,0.3)' }}>Execution ID: fleetops-workflow-{currentStatus.toLowerCase()}</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', width: '100%', padding: '0 10px' }}>
+        {/* Connecting line */}
+        <div style={{ position: 'absolute', top: '10px', left: '20px', right: '20px', height: '2px', background: 'var(--glass-border)', zIndex: 1 }} />
+        <div style={{ position: 'absolute', top: '10px', left: '20px', width: `${(Math.max(0, currentIndex) / (steps.length - 1)) * 96}%`, height: '2px', background: 'var(--accent-primary)', zIndex: 2, transition: 'width 0.4s ease' }} />
+
+        {steps.map((step, idx) => {
+          const isPassed = idx < currentIndex;
+          const isActive = idx === currentIndex;
+
+          let stepColor = 'var(--text-muted)';
+          let circleBg = 'var(--bg-elevated)';
+          let borderStyle = '1px solid var(--glass-border)';
+
+          if (isPassed) {
+            stepColor = 'var(--accent-primary)';
+            circleBg = 'var(--accent-primary)';
+            borderStyle = '1px solid var(--accent-primary)';
+          } else if (isActive) {
+            stepColor = 'var(--accent-success)';
+            circleBg = 'var(--bg-elevated)';
+            borderStyle = '2px solid var(--accent-success)';
+          }
+
+          return (
+            <div key={step} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 3, position: 'relative' }}>
+              <div style={{
+                width: '20px', height: '20px', borderRadius: '50%',
+                background: circleBg, border: borderStyle,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: isActive ? '0 0 8px var(--accent-success)' : 'none',
+                transition: 'all 0.3s ease'
+              }}>
+                {isPassed && <span style={{ color: '#fff', fontSize: '10px', fontWeight: 'bold' }}>✓</span>}
+                {isActive && <div className="pulse-dot pulse-green" style={{ width: '6px', height: '6px' }} />}
+              </div>
+              <span style={{ fontSize: '0.62rem', color: stepColor, marginTop: '4px', fontWeight: isActive ? 700 : 500, textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>
+                {step.replace('_', ' ')}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 const Requests = () => {
   const { state: appContextState } = useContext(AppContext);
@@ -32,7 +91,7 @@ const Requests = () => {
           // Clear history state so refresh doesn't trigger it again
           window.history.replaceState({}, document.title);
         } catch (e) {
-          alert('Failed to create request: ' + (e.response?.data || e.message));
+          pushNotification('danger', 'Request Failed', 'Failed to create request: ' + (e.response?.data || e.message));
         }
       }
 
@@ -54,7 +113,7 @@ const Requests = () => {
             }
           }
           if (failures > 0) {
-            alert(`${failures} queue item(s) failed to formalize into requests.`);
+            pushNotification('warning', 'Partial Success', `${failures} queue item(s) failed to formalize into requests.`);
           }
         }
         window.history.replaceState({}, document.title);
@@ -109,12 +168,21 @@ const Requests = () => {
   const isManagerOrAdmin = ['MANAGER', 'ROLE_MANAGER', 'ADMIN', 'ROLE_ADMIN'].includes(appContextState.role);
 
   const handleStatusUpdate = async (id, status) => {
+    const req = requests.find(r => r.id === id);
     try {
       setActionLoading(`${id}:${status}`);
       await requestAPI.updateStatus(id, status);
+      // CloudTrail: log every state machine transition
+      logAudit(
+        appContextState.username,
+        `UpdateRequestStatus`,
+        `Request #${id} (${req?.vehicleNumber || req?.vehicleId})`,
+        `Status transition: ${req?.status} → ${status}`
+      );
       await loadRequests();
+      pushNotification('success', 'Status Updated', 'Request status updated successfully.');
     } catch (err) {
-      alert(err.response?.data || err.message || 'Failed to update status');
+      pushNotification('danger', 'Update Failed', err.response?.data || err.message || 'Failed to update status');
     } finally {
       setActionLoading('');
     }
@@ -122,16 +190,24 @@ const Requests = () => {
 
   const handleAssign = async (id, technician) => {
     if (!technician?.trim()) {
-      alert('Technician username is required');
+      pushNotification('warning', 'Missing Input', 'Technician username is required');
       return;
     }
     try {
       setActionLoading(`${id}:ASSIGN`);
       await requestAPI.assignTechnician(id, technician.trim());
+      // CloudTrail: log technician assignment
+      logAudit(
+        appContextState.username,
+        'AssignTechnician',
+        `Request #${id}`,
+        `Assigned technician: ${technician.trim()}`
+      );
       await loadRequests();
       setAssignModal({ open: false, requestId: null, technician: '' });
+      pushNotification('success', 'Technician Assigned', 'Technician has been assigned to the request.');
     } catch (err) {
-      alert(err.response?.data || err.message || 'Failed to assign technician');
+      pushNotification('danger', 'Assignment Failed', err.response?.data || err.message || 'Failed to assign technician');
     } finally {
       setActionLoading('');
     }
@@ -140,16 +216,24 @@ const Requests = () => {
   const handleComplete = async (id, resolutionNotes, downtimeHoursInput) => {
     const downtimeHours = downtimeHoursInput === '' ? null : Number(downtimeHoursInput);
     if (downtimeHoursInput !== '' && Number.isNaN(downtimeHours)) {
-      alert('Downtime hours must be a number');
+      pushNotification('warning', 'Invalid Input', 'Downtime hours must be a number');
       return;
     }
     try {
       setActionLoading(`${id}:COMPLETE`);
       await requestAPI.completeRequest(id, { resolutionNotes, downtimeHours });
+      // CloudTrail: log request completion
+      logAudit(
+        appContextState.username,
+        'CompleteRequest',
+        `Request #${id}`,
+        `Resolution: "${resolutionNotes}". Downtime: ${downtimeHours ?? 0}h`
+      );
       await loadRequests();
       setCompleteModal({ open: false, requestId: null, resolutionNotes: '', downtimeHours: '' });
+      pushNotification('success', 'Request Completed', 'The service request has been marked as completed.');
     } catch (err) {
-      alert(err.response?.data || err.message || 'Failed to complete request');
+      pushNotification('danger', 'Completion Failed', err.response?.data || err.message || 'Failed to complete request');
     } finally {
       setActionLoading('');
     }
@@ -158,8 +242,18 @@ const Requests = () => {
   if (loading) return <LoadingSpinner fullScreen />;
 
   return (
-    <div className="container">
-      <h2 style={{ marginBottom: '2rem' }}>Service Requests</h2>
+    <div className="container" style={{ paddingBottom: '3rem' }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', gap: '1rem' }}>
+        <div>
+          <h2 style={{ margin: 0, marginBottom: '0.25rem' }}>Service Requests</h2>
+          <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+            State machine: OPEN → PENDING_APPROVAL → ASSIGNED → IN_PROGRESS → COMPLETED
+          </p>
+        </div>
+        <span className="aws-badge" style={{ fontSize: '0.7rem', alignSelf: 'flex-start', marginTop: '0.25rem' }}>Audit Logged</span>
+      </div>
       {loadError && (
         <div className="glass-panel" style={{ marginBottom: '1rem', border: '1px solid var(--accent-danger)', color: 'var(--accent-danger)', padding: '0.75rem' }}>
           {loadError}
@@ -169,90 +263,82 @@ const Requests = () => {
       {requests.length === 0 ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
           <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🧾</div>
-          <h3>No requests found</h3>
+          <h3 style={{ color: 'var(--text-primary)' }}>No requests found</h3>
+          <p style={{ fontSize: '0.875rem' }}>Service requests will appear here once submitted.</p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {requests.map(req => {
             const v = vehiclesMap[req.vehicleId];
+            const priorityColor = req.priority === 'CRITICAL' ? 'var(--accent-danger)' : req.priority === 'HIGH' ? '#f97316' : req.priority === 'MEDIUM' ? 'var(--accent-warning)' : 'var(--text-muted)';
             return (
-              <div key={req.id} className="glass-panel" style={{ padding: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--glass-border)', paddingBottom: '1rem', marginBottom: '1rem' }}>
+              <div key={req.id} className="glass-panel" style={{ padding: '1.25rem 1.5rem', borderLeft: `3px solid ${statusColors[req.status] || 'var(--glass-border)'}` }}>
+
+                {/* Card header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.875rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <div>
-                    <h3 style={{ fontSize: '1.1rem', marginBottom: '0.25rem' }}>Request #{req.id} — {req.requestType}</h3>
-                    <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Created: {new Date(req.createdAt).toLocaleString()}</p>
-                    <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Priority: <span style={{color: req.priority === 'CRITICAL' ? 'var(--accent-danger)' : 'inherit'}}>{req.priority}</span></p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                      <h3 style={{ fontSize: '0.95rem', margin: 0, fontWeight: 700 }}>Request #{req.id}</h3>
+                      <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: '10px', background: 'rgba(255,255,255,0.07)', border: '1px solid var(--glass-border)', color: 'var(--text-secondary)' }}>{req.requestType}</span>
+                      <span style={{ fontSize: '0.68rem', padding: '2px 8px', borderRadius: '10px', fontWeight: 700, background: `${priorityColor}18`, border: `1px solid ${priorityColor}40`, color: priorityColor }}>{req.priority}</span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                      Created: {req.createdAt ? new Date(req.createdAt).toLocaleString('en-IN') : 'N/A'}
+                      {req.requestedBy && <span style={{ marginLeft: '0.75rem' }}>by <strong style={{ color: 'var(--text-secondary)' }}>{req.requestedBy}</strong></span>}
+                    </p>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ display: 'inline-block', padding: '0.25rem 0.5rem', background: 'rgba(255,255,255,0.1)', color: statusColors[req.status] || 'white', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold' }}>
-                      {req.status}
-                    </span>
-                  </div>
+                  <span style={{
+                    padding: '4px 12px', borderRadius: '14px', fontSize: '0.72rem', fontWeight: 700,
+                    background: `${statusColors[req.status] || 'rgba(255,255,255,0.1)'}20`,
+                    color: statusColors[req.status] || 'var(--text-primary)',
+                    border: `1px solid ${statusColors[req.status] || 'var(--glass-border)'}40`,
+                    whiteSpace: 'nowrap',
+                  }}>{req.status}</span>
                 </div>
                 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.95rem' }}>
-                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                    <strong>Vehicle:</strong> 
-                    <span>{v ? `${v.brand} ${v.model} (${v.vehicleNumber})` : req.vehicleNumber}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                    <strong>Requested By:</strong> 
-                    <span>{req.requestedBy}</span>
-                  </div>
-                  {req.assignedTechnician && (
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                      <strong>Technician:</strong> 
-                      <span>{req.assignedTechnician}</span>
-                    </div>
-                  )}
-                  {req.description && (
-                    <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: 'var(--bg-elevated)', borderRadius: '4px', color: 'var(--text-secondary)' }}>
-                      <em>"{req.description}"</em>
-                    </div>
-                  )}
-                  {isManagerOrAdmin && (
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
-                      {req.status === 'OPEN' && (
-                        <button className="btn-secondary" disabled={actionLoading === `${req.id}:PENDING_APPROVAL`} onClick={() => handleStatusUpdate(req.id, 'PENDING_APPROVAL')}>
-                          Move to Pending Approval
-                        </button>
-                      )}
-                      {req.status === 'PENDING_APPROVAL' && (
-                        <>
-                          <button className="btn-primary" disabled={actionLoading === `${req.id}:APPROVED`} onClick={() => handleStatusUpdate(req.id, 'APPROVED')}>
-                            Approve
-                          </button>
-                          <button className="btn-secondary" disabled={actionLoading === `${req.id}:REJECTED`} onClick={() => handleStatusUpdate(req.id, 'REJECTED')}>
-                            Reject
-                          </button>
-                        </>
-                      )}
-                      {req.status === 'APPROVED' && (
-                        <button
-                          className="btn-primary"
-                          disabled={actionLoading === `${req.id}:ASSIGN`}
-                          onClick={() => setAssignModal({ open: true, requestId: req.id, technician: req.assignedTechnician || '' })}
-                        >
-                          Assign Technician
-                        </button>
-                      )}
-                      {req.status === 'ASSIGNED' && (
-                        <button className="btn-primary" disabled={actionLoading === `${req.id}:IN_PROGRESS`} onClick={() => handleStatusUpdate(req.id, 'IN_PROGRESS')}>
-                          Start Work
-                        </button>
-                      )}
-                      {req.status === 'IN_PROGRESS' && (
-                        <button
-                          className="btn-primary"
-                          disabled={actionLoading === `${req.id}:COMPLETE`}
-                          onClick={() => setCompleteModal({ open: true, requestId: req.id, resolutionNotes: req.resolutionNotes || '', downtimeHours: req.downtimeHours ?? '' })}
-                        >
-                          Complete
-                        </button>
-                      )}
-                    </div>
-                  )}
+                {/* Body details */}
+                <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.75rem', alignItems: 'center' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}><Truck size={14} strokeWidth={2} style={{ flexShrink: 0 }} /><strong>{v ? `${v.brand} ${v.model}` : req.vehicleNumber}</strong>{v && <span style={{ color: 'var(--text-muted)', marginLeft: '0.3rem' }}>({v.vehicleNumber})</span>}</span>
+                  {req.assignedTechnician && <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}><HardHat size={14} strokeWidth={2} style={{ flexShrink: 0 }} />Tech: <strong style={{ color: 'var(--accent-info)' }}>{req.assignedTechnician}</strong></span>}
                 </div>
+                {req.description && (
+                  <div style={{ marginBottom: '0.75rem', padding: '0.6rem 0.875rem', background: 'var(--bg-elevated)', borderRadius: '6px', fontSize: '0.82rem', color: 'var(--text-secondary)', borderLeft: '2px solid var(--glass-border)' }}>
+                    {req.description}
+                  </div>
+                )}
+                <StepFunctionsTimeline currentStatus={req.status} />
+                {isManagerOrAdmin && (
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
+                    {req.status === 'OPEN' && (
+                      <button className="btn-secondary" disabled={actionLoading === `${req.id}:PENDING_APPROVAL`} onClick={() => handleStatusUpdate(req.id, 'PENDING_APPROVAL')}>
+                        Move to Pending Approval
+                      </button>
+                    )}
+                    {req.status === 'PENDING_APPROVAL' && (
+                      <>
+                        <button className="btn-primary" disabled={actionLoading === `${req.id}:APPROVED`} onClick={() => handleStatusUpdate(req.id, 'APPROVED')}>Approve</button>
+                        <button className="btn-secondary" disabled={actionLoading === `${req.id}:REJECTED`} onClick={() => handleStatusUpdate(req.id, 'REJECTED')}>Reject</button>
+                      </>
+                    )}
+                    {req.status === 'APPROVED' && (
+                      <button className="btn-primary" disabled={actionLoading === `${req.id}:ASSIGN`}
+                        onClick={() => setAssignModal({ open: true, requestId: req.id, technician: req.assignedTechnician || '' })}>
+                        Assign Technician
+                      </button>
+                    )}
+                    {req.status === 'ASSIGNED' && (
+                      <button className="btn-primary" disabled={actionLoading === `${req.id}:IN_PROGRESS`} onClick={() => handleStatusUpdate(req.id, 'IN_PROGRESS')}>
+                        Start Work
+                      </button>
+                    )}
+                    {req.status === 'IN_PROGRESS' && (
+                      <button className="btn-primary" disabled={actionLoading === `${req.id}:COMPLETE`}
+                        onClick={() => setCompleteModal({ open: true, requestId: req.id, resolutionNotes: req.resolutionNotes || '', downtimeHours: req.downtimeHours ?? '' })}>
+                        Complete
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
