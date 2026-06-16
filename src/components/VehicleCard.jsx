@@ -178,6 +178,7 @@ const VehicleCard = ({ vehicle, onRequestService }) => {
                 <select
                   value={docType}
                   onChange={(e) => setDocType(e.target.value)}
+                  aria-label={`Document type for ${vehicle.vehicleNumber}`}
                   style={{ fontSize: '0.75rem', padding: '0.3rem', width: '100%', height: 'auto', background: 'var(--bg-elevated)' }}
                 >
                   <option value="RC Book">RC Book</option>
@@ -186,7 +187,7 @@ const VehicleCard = ({ vehicle, onRequestService }) => {
                   <option value="Permits">Permits</option>
                 </select>
               </div>
-              <label className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', cursor: 'pointer', opacity: uploading ? 0.6 : 1, fontSize: '0.75rem', padding: '0.4rem' }}>
+              <label htmlFor={`upload-doc-${vehicle.id}`} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', cursor: 'pointer', opacity: uploading ? 0.6 : 1, fontSize: '0.75rem', padding: '0.4rem' }}>
                 {uploading ? (
                   <>
                     <RefreshCw size={13} strokeWidth={2} className="spin-icon" /> Uploading Document...
@@ -197,10 +198,12 @@ const VehicleCard = ({ vehicle, onRequestService }) => {
                   </>
                 )}
                 <input
+                  id={`upload-doc-${vehicle.id}`}
                   type="file"
                   accept=".pdf,.png,.jpg,.jpeg"
                   onChange={handleUpload}
                   disabled={uploading}
+                  aria-label={`Upload ${docType} for ${vehicle.vehicleNumber}`}
                   style={{ display: 'none' }}
                 />
               </label>

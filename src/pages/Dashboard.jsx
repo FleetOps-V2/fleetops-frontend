@@ -88,6 +88,7 @@ const Dashboard = () => {
               className="btn-primary btn-sm"
               onClick={handleSimulateAlerts}
               disabled={triggeringSNS}
+              aria-busy={triggeringSNS}
               style={{ fontSize: '0.82rem', padding: '0.45rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
             >
               <Bell size={13} strokeWidth={2} />
@@ -160,7 +161,7 @@ const Dashboard = () => {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
               {showTechnicalControls && <span className="aws-badge" style={{ fontSize: '0.65rem', color: '#ec4899', background: 'rgba(236,72,153,0.1)', borderColor: 'rgba(236,72,153,0.2)' }}>EventBridge → Lambda → SNS</span>}
               {insuranceAlerts.length > 0 && (
-                <span style={{ fontSize: '0.72rem', color: 'var(--accent-danger)', fontWeight: 700 }}>{insuranceAlerts.length} ALARM{insuranceAlerts.length > 1 ? 'S' : ''}</span>
+                <span aria-live="polite" style={{ fontSize: '0.72rem', color: 'var(--accent-danger)', fontWeight: 700 }}>{insuranceAlerts.length} ALARM{insuranceAlerts.length > 1 ? 'S' : ''}</span>
               )}
             </div>
           </div>
@@ -199,7 +200,7 @@ const Dashboard = () => {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
               {showTechnicalControls && <span className="aws-badge" style={{ fontSize: '0.65rem', color: '#ec4899', background: 'rgba(236,72,153,0.1)', borderColor: 'rgba(236,72,153,0.2)' }}>EventBridge → Lambda → SNS</span>}
               {serviceAlerts.length > 0 && (
-                <span style={{ fontSize: '0.72rem', color: 'var(--accent-warning)', fontWeight: 700 }}>{serviceAlerts.length} ALARM{serviceAlerts.length > 1 ? 'S' : ''}</span>
+                <span aria-live="polite" style={{ fontSize: '0.72rem', color: 'var(--accent-warning)', fontWeight: 700 }}>{serviceAlerts.length} ALARM{serviceAlerts.length > 1 ? 'S' : ''}</span>
               )}
             </div>
           </div>

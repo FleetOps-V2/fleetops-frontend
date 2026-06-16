@@ -89,7 +89,7 @@ const Requests = () => {
             description: 'Automated service request'
           });
           // Clear history state so refresh doesn't trigger it again
-          window.history.replaceState({}, document.title);
+          navigate(location.pathname, { replace: true, state: {} });
         } catch (e) {
           pushNotification('danger', 'Request Failed', 'Failed to create request: ' + (e.response?.data || e.message));
         }
@@ -117,6 +117,7 @@ const Requests = () => {
           }
         }
         window.history.replaceState({}, document.title);
+        navigate(location.pathname, { replace: true, state: {} });
       }
 
       loadRequests();
@@ -311,13 +312,17 @@ const Requests = () => {
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
                     {req.status === 'OPEN' && (
                       <button className="btn-secondary" disabled={actionLoading === `${req.id}:PENDING_APPROVAL`} onClick={() => handleStatusUpdate(req.id, 'PENDING_APPROVAL')}>
-                        Move to Pending Approval
+                        {actionLoading === `${req.id}:PENDING_APPROVAL` ? 'Moving...' : 'Move to Pending Approval'}
                       </button>
                     )}
                     {req.status === 'PENDING_APPROVAL' && (
                       <>
-                        <button className="btn-primary" disabled={actionLoading === `${req.id}:APPROVED`} onClick={() => handleStatusUpdate(req.id, 'APPROVED')}>Approve</button>
-                        <button className="btn-secondary" disabled={actionLoading === `${req.id}:REJECTED`} onClick={() => handleStatusUpdate(req.id, 'REJECTED')}>Reject</button>
+                        <button className="btn-primary" disabled={actionLoading === `${req.id}:APPROVED`} onClick={() => handleStatusUpdate(req.id, 'APPROVED')}>
+                          {actionLoading === `${req.id}:APPROVED` ? 'Approving...' : 'Approve'}
+                        </button>
+                        <button className="btn-secondary" disabled={actionLoading === `${req.id}:REJECTED`} onClick={() => handleStatusUpdate(req.id, 'REJECTED')}>
+                          {actionLoading === `${req.id}:REJECTED` ? 'Rejecting...' : 'Reject'}
+                        </button>
                       </>
                     )}
                     {req.status === 'APPROVED' && (
@@ -328,7 +333,7 @@ const Requests = () => {
                     )}
                     {req.status === 'ASSIGNED' && (
                       <button className="btn-primary" disabled={actionLoading === `${req.id}:IN_PROGRESS`} onClick={() => handleStatusUpdate(req.id, 'IN_PROGRESS')}>
-                        Start Work
+                        {actionLoading === `${req.id}:IN_PROGRESS` ? 'Starting...' : 'Start Work'}
                       </button>
                     )}
                     {req.status === 'IN_PROGRESS' && (
@@ -363,7 +368,7 @@ const Requests = () => {
                 disabled={actionLoading === `${assignModal.requestId}:ASSIGN`}
                 onClick={() => handleAssign(assignModal.requestId, assignModal.technician)}
               >
-                Save Assignment
+                {actionLoading === `${assignModal.requestId}:ASSIGN` ? 'Saving...' : 'Save Assignment'}
               </button>
             </div>
           </div>
@@ -397,7 +402,7 @@ const Requests = () => {
                 disabled={actionLoading === `${completeModal.requestId}:COMPLETE`}
                 onClick={() => handleComplete(completeModal.requestId, completeModal.resolutionNotes, completeModal.downtimeHours)}
               >
-                Mark Completed
+                {actionLoading === `${completeModal.requestId}:COMPLETE` ? 'Completing...' : 'Mark Completed'}
               </button>
             </div>
           </div>

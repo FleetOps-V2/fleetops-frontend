@@ -32,9 +32,9 @@ const Login = () => {
         localStorage.setItem('role', res.data.role);
         dispatch({ type: 'LOGIN', payload: { username: res.data.username, role: res.data.role } });
         const role = res.data.role;
-        if (role === 'ADMIN' || role === 'ROLE_ADMIN') window.location.href = '/admin';
-        else if (role === 'MANAGER' || role === 'ROLE_MANAGER') window.location.href = '/dashboard';
-        else window.location.href = '/vehicles';
+        if (role === 'ADMIN' || role === 'ROLE_ADMIN') navigate('/admin');
+        else if (role === 'MANAGER' || role === 'ROLE_MANAGER') navigate('/dashboard');
+        else navigate('/vehicles');
       } else {
         await authAPI.register(formData);
         setIsLogin(true);
@@ -54,11 +54,12 @@ const Login = () => {
   };
 
   return (
-    <div style={{
-      minHeight: '100vh', display: 'grid', gridTemplateColumns: '1fr 1fr', background: 'var(--bg-color)',
+    <div className="login-container" style={{
+      minHeight: '100vh', display: 'flex', flexWrap: 'wrap', background: 'var(--bg-color)',
     }}>
       {/* Left panel — branding */}
-      <div style={{
+      <div className="login-branding" style={{
+        flex: '1 1 400px',
         background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)',
         display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start',
         padding: '4rem', position: 'relative', overflow: 'hidden',
@@ -108,7 +109,7 @@ const Login = () => {
       </div>
 
       {/* Right panel — form */}
-      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '3rem 2rem', overflowY: 'auto' }}>
+      <div className="login-form-container" style={{ flex: '1 1 400px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '3rem 2rem', overflowY: 'auto' }}>
         <div style={{ width: '100%', maxWidth: '420px' }}>
           <div style={{ marginBottom: '2rem', textAlign: 'left' }}>
             <h2 style={{ fontSize: '1.75rem', fontWeight: 700, marginBottom: '0.4rem' }}>

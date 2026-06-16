@@ -223,10 +223,10 @@ const Tracking = () => {
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '2rem', alignItems: 'start' }}>
+      <div className="tracking-grid" style={{ display: 'flex', flexWrap: 'wrap', gap: '2rem', alignItems: 'start' }}>
 
         {/* Map + Status Panel */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ flex: '1 1 500px', display: 'flex', flexDirection: 'column', gap: '1.5rem', minWidth: 0 }}>
 
           {/* Map Canvas */}
           <div className="glass-panel" style={{ height: '400px', position: 'relative', overflow: 'hidden', padding: 0 }}>
@@ -258,9 +258,18 @@ const Tracking = () => {
               );
             })}
 
-            {loading && (
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }}>
+            {loading && !pollingError && (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', zIndex: 20 }}>
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Waiting for first ping...</span>
+              </div>
+            )}
+
+            {pollingError && (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(239,68,68,0.2)', zIndex: 20 }}>
+                <span style={{ color: 'var(--accent-danger)', fontSize: '1rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ShieldAlert size={18} />
+                  {pollingError}
+                </span>
               </div>
             )}
 
@@ -317,7 +326,7 @@ const Tracking = () => {
         </div>
 
         {/* Telemetry Log Stream */}
-        <div className="glass-panel" style={{ height: '610px', display: 'flex', flexDirection: 'column', padding: '1.25rem' }}>
+        <div className="glass-panel" style={{ flex: '1 1 340px', height: '610px', display: 'flex', flexDirection: 'column', padding: '1.25rem', minWidth: 0 }}>
           <div style={{ marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <Database size={15} color="var(--accent-purple)" /> Backend Ping Log
