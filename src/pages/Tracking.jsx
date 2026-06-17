@@ -67,7 +67,7 @@ const Tracking = () => {
         try {
           await trackingAPI.ping(payload);
 
-          const msgId = `msg-${Math.random().toString(16).substr(2, 8)}`;
+          const msgId = `msg-${Math.random().toString(16).substring(2, 10)}`;
           setTelemetryLogs(prev => [
             {
               timestamp: new Date().toLocaleTimeString(),

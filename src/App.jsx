@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Pages
 import Home          from './pages/Home';
@@ -18,6 +19,7 @@ const App = () => {
     <>
       <Navbar />
       <div className="page-wrapper">
+        <ErrorBoundary>
         <Routes>
           {/* Public */}
           <Route path="/" element={<Home />} />
@@ -47,6 +49,7 @@ const App = () => {
             <ProtectedRoute allowedRoles={['ADMIN']}><Admin /></ProtectedRoute>
           } />
         </Routes>
+        </ErrorBoundary>
       </div>
     </>
   );
