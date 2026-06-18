@@ -4,6 +4,7 @@ import { AppContext } from '../context/AppContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { pushNotification } from '../components/NotificationCenter';
 import ConfirmModal from '../components/ConfirmModal';
+import { logAudit } from '../utils/AuditLogger';
 import { ListTodo, PlusCircle, Archive, Bell, CalendarRange, Wrench, HardDrive, Image, Server, Brain } from 'lucide-react';
 
 const Maintenance = () => {
