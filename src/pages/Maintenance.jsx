@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { taskAPI, vehicleAPI, requestAPI } from '../services/api';
+import { taskAPI, vehicleAPI, requestAPI, aiAPI } from '../services/api';
 import { AppContext } from '../context/AppContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { pushNotification } from '../components/NotificationCenter';
 import ConfirmModal from '../components/ConfirmModal';
-import { ListTodo, PlusCircle, Archive, Bell, CalendarRange, Wrench, HardDrive, Image, Server } from 'lucide-react';
+import { ListTodo, PlusCircle, Archive, Bell, CalendarRange, Wrench, HardDrive, Image, Server, Brain } from 'lucide-react';
 
 const Maintenance = () => {
   const { state } = useContext(AppContext);
@@ -23,6 +23,12 @@ const Maintenance = () => {
   const [selectedVehicle, setSelectedVehicle] = useState('');
   const [selectedTaskType, setSelectedTaskType] = useState('ROUTINE_SERVICE');
   const [taskDesc, setTaskDesc] = useState('');
+
+  // AI Fleet Advisor states
+  const [fleetAnalysis, setFleetAnalysis] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [addingToQueue, setAddingToQueue] = useState('');
 
   // EFS Mock Shared storage states
   const [efsPhotos, setEfsPhotos] = useState([
@@ -184,6 +190,42 @@ const Maintenance = () => {
       pushNotification('danger', 'Clear Failed', err.response?.data || err.message || 'Failed to clear queue');
     } finally {
       setActionLoading('');
+    }
+  };
+
+  const handleAnalyseFleet = async () => {
+    setAiLoading(true);
+    setAiError('');
+    try {
+      const res = await aiAPI.getFleetAnalysis();
+      setFleetAnalysis(res.data);
+      pushNotification('success', 'Fleet Analysis Complete', `Health score: ${res.data.fleetHealthScore}/100`, 'Amazon Bedrock');
+    } catch (err) {
+      const msg = err.response?.status === 403
+        ? 'Fleet analysis requires Manager or Admin role.'
+        : err.response?.data || err.message || 'Fleet analysis failed';
+      setAiError(msg);
+      pushNotification('danger', 'Analysis Failed', msg);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleAddRecommendationToQueue = async (rec) => {
+    const key = `ai:${rec.vehicleId}:${rec.taskType}`;
+    setAddingToQueue(key);
+    try {
+      const res = await taskAPI.addTask({
+        vehicleId: rec.vehicleId,
+        taskType: rec.taskType,
+        description: rec.action,
+      });
+      setQueue(res.data);
+      pushNotification('info', 'Added to Queue', `${rec.vehicleNumber} — ${rec.taskType} queued.`, 'AWS EventBridge');
+    } catch (err) {
+      pushNotification('danger', 'Queue Failed', err.response?.data || err.message || 'Failed to add task');
+    } finally {
+      setAddingToQueue('');
     }
   };
 
@@ -438,6 +480,121 @@ const Maintenance = () => {
           </div>
         </div>
 
+      </div>
+
+      {/* Fleet Maintenance Advisor — Amazon Bedrock */}
+      <div className="glass-panel" style={{ padding: '1.75rem', marginTop: '2rem', borderTop: '4px solid var(--accent-primary)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+          <div>
+            <h3 style={{ fontSize: '1.25rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Brain size={20} color="var(--accent-primary)" /> Fleet Maintenance Advisor
+            </h3>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              Powered by Amazon Bedrock
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            {fleetAnalysis && (
+              <div style={{
+                padding: '0.4rem 1rem',
+                borderRadius: '20px',
+                fontWeight: 700,
+                fontSize: '1rem',
+                background: fleetAnalysis.fleetHealthScore >= 80 ? 'rgba(34,197,94,0.15)' : fleetAnalysis.fleetHealthScore >= 60 ? 'rgba(234,179,8,0.15)' : 'rgba(239,68,68,0.15)',
+                color: fleetAnalysis.fleetHealthScore >= 80 ? 'var(--accent-success)' : fleetAnalysis.fleetHealthScore >= 60 ? 'var(--accent-warning)' : 'var(--accent-danger)',
+                border: `1px solid ${fleetAnalysis.fleetHealthScore >= 80 ? 'rgba(34,197,94,0.3)' : fleetAnalysis.fleetHealthScore >= 60 ? 'rgba(234,179,8,0.3)' : 'rgba(239,68,68,0.3)'}`,
+              }}>
+                Fleet Health: {fleetAnalysis.fleetHealthScore}/100
+              </div>
+            )}
+            <button
+              className="btn-primary"
+              onClick={handleAnalyseFleet}
+              disabled={aiLoading}
+              style={{ fontSize: '0.85rem', padding: '0.5rem 1.25rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+            >
+              {aiLoading ? (
+                <>
+                  <span className="spinner-sm" style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                  Analysing...
+                </>
+              ) : (
+                <><Brain size={14} /> Analyse Fleet</>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {aiError && (
+          <div style={{ padding: '0.75rem', border: '1px solid var(--accent-danger)', borderRadius: '6px', color: 'var(--accent-danger)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+            {aiError}
+          </div>
+        )}
+
+        {fleetAnalysis ? (
+          <>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', lineHeight: 1.6 }}>
+              {fleetAnalysis.summary}
+            </p>
+
+            {fleetAnalysis.recommendations && fleetAnalysis.recommendations.length > 0 ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
+                {fleetAnalysis.recommendations.map((rec, i) => (
+                  <div key={i} style={{
+                    background: 'var(--bg-elevated)',
+                    borderRadius: '8px',
+                    padding: '1rem',
+                    borderLeft: `4px solid ${rec.priority === 'HIGH' ? 'var(--accent-danger)' : rec.priority === 'MEDIUM' ? 'var(--accent-warning)' : 'var(--accent-success)'}`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: '0.9rem' }}>{rec.vehicleNumber}</strong>
+                      <span style={{
+                        fontSize: '0.65rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        background: rec.priority === 'HIGH' ? 'rgba(239,68,68,0.15)' : rec.priority === 'MEDIUM' ? 'rgba(234,179,8,0.15)' : 'rgba(34,197,94,0.15)',
+                        color: rec.priority === 'HIGH' ? 'var(--accent-danger)' : rec.priority === 'MEDIUM' ? 'var(--accent-warning)' : 'var(--accent-success)',
+                      }}>{rec.priority}</span>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{rec.taskType}</div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 500 }}>{rec.action}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{rec.reasoning}</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        Confidence: <strong style={{ color: rec.confidence >= 80 ? 'var(--accent-success)' : rec.confidence >= 60 ? 'var(--accent-warning)' : 'var(--accent-danger)' }}>{rec.confidence}%</strong>
+                      </span>
+                      <button
+                        className="btn-secondary btn-sm"
+                        disabled={addingToQueue === `ai:${rec.vehicleId}:${rec.taskType}`}
+                        onClick={() => handleAddRecommendationToQueue(rec)}
+                        style={{ fontSize: '0.72rem', padding: '0.2rem 0.6rem' }}
+                      >
+                        {addingToQueue === `ai:${rec.vehicleId}:${rec.taskType}` ? 'Adding...' : '+ Queue'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--accent-success)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '8px', background: 'rgba(34,197,94,0.05)' }}>
+                <strong>Fleet is Healthy</strong>
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>No maintenance actions required at this time.</p>
+              </div>
+            )}
+          </>
+        ) : (
+          !aiLoading && (
+            <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', border: '1.5px dashed var(--glass-border)', borderRadius: '8px' }}>
+              <Brain size={36} strokeWidth={1.5} color="var(--text-muted)" style={{ marginBottom: '0.5rem' }} />
+              <p style={{ margin: 0 }}>Click <strong>Analyse Fleet</strong> to get AI-powered maintenance recommendations.</p>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem' }}>Results are cached for 15 minutes.</p>
+            </div>
+          )
+        )}
       </div>
 
       {/* Shared EFS Media Vault Section */}

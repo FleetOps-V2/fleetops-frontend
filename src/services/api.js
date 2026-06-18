@@ -108,4 +108,11 @@ export const trackingAPI = {
   getVehicle: (id)=> api.get(`/api/tracking/vehicle/${id}`),
 };
 
+// ----------------------------------------------------
+// AI Fleet Analysis API
+// ----------------------------------------------------
+export const aiAPI = {
+  getFleetAnalysis: () => api.get('/api/vehicles/ai/fleet-analysis'),
+};
+
 export default api;
