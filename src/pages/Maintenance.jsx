@@ -7,6 +7,12 @@ import ConfirmModal from '../components/ConfirmModal';
 import { logAudit } from '../utils/AuditLogger';
 import { ListTodo, PlusCircle, Archive, Bell, CalendarRange, Wrench, HardDrive, Image, Server, Brain } from 'lucide-react';
 
+const extractError = (err, fallback) => {
+  const data = err.response?.data;
+  return (typeof data === 'string' ? data : data?.message || data?.error || null)
+    || err.message || fallback;
+};
+
 const Maintenance = () => {
   const { state } = useContext(AppContext);
   const [queue, setQueue] = useState(null);
@@ -100,7 +106,7 @@ const Maintenance = () => {
       }
     } catch (err) {
       console.error("Failed to load maintenance center data", err);
-      setLoadError(err.response?.data || err.message || 'Failed to load maintenance data');
+      setLoadError(extractError(err, 'Failed to load maintenance data'));
     } finally {
       setLoading(false);
     }
@@ -142,7 +148,7 @@ const Maintenance = () => {
         'AWS EventBridge'
       );
     } catch (err) {
-      pushNotification('danger', 'Task Failed', err.response?.data || err.message || 'Failed to add task');
+      pushNotification('danger', 'Task Failed', extractError(err, 'Failed to add task'));
     } finally {
       setSubmitting(false);
     }
@@ -162,7 +168,7 @@ const Maintenance = () => {
         `Removed pending ${tType} maintenance task from queue`
       );
     } catch (err) {
-      pushNotification('danger', 'Remove Failed', err.response?.data || err.message || 'Failed to remove task');
+      pushNotification('danger', 'Remove Failed', extractError(err, 'Failed to remove task'));
     } finally {
       setActionLoading('');
     }
@@ -188,7 +194,7 @@ const Maintenance = () => {
       );
       pushNotification('success', 'Queue Cleared', 'All pending maintenance tasks have been cleared.');
     } catch (err) {
-      pushNotification('danger', 'Clear Failed', err.response?.data || err.message || 'Failed to clear queue');
+      pushNotification('danger', 'Clear Failed', extractError(err, 'Failed to clear queue'));
     } finally {
       setActionLoading('');
     }
@@ -204,7 +210,7 @@ const Maintenance = () => {
     } catch (err) {
       const msg = err.response?.status === 403
         ? 'Fleet analysis requires Manager or Admin role.'
-        : err.response?.data || err.message || 'Fleet analysis failed';
+        : extractError(err, 'Fleet analysis failed');
       setAiError(msg);
       pushNotification('danger', 'Analysis Failed', msg);
     } finally {
@@ -224,7 +230,7 @@ const Maintenance = () => {
       setQueue(res.data);
       pushNotification('info', 'Added to Queue', `${rec.vehicleNumber} — ${rec.taskType} queued.`, 'AWS EventBridge');
     } catch (err) {
-      pushNotification('danger', 'Queue Failed', err.response?.data || err.message || 'Failed to add task');
+      pushNotification('danger', 'Queue Failed', extractError(err, 'Failed to add task'));
     } finally {
       setAddingToQueue('');
     }
@@ -259,7 +265,7 @@ const Maintenance = () => {
         `Escalated task queue item into an official Service Request`
       );
     } catch (err) {
-      pushNotification('danger', 'Escalation Failed', err.response?.data || err.message || 'Failed to escalate request');
+      pushNotification('danger', 'Escalation Failed', extractError(err, 'Failed to escalate request'));
     } finally {
       setActionLoading('');
     }
