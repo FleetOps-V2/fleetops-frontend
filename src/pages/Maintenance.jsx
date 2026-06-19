@@ -277,22 +277,7 @@ const Maintenance = () => {
 
   return (
     <div className="container">
-      {/* EventBridge & Lambda Scheduled Alert Rule Strip */}
-      <div className="glass-panel" style={{ padding: '1.25rem', marginBottom: '2rem', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', borderLeft: '4px solid var(--accent-warning)' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-            <h3 style={{ fontSize: '1.05rem', margin: 0 }}>Automated Scheduling Pipeline</h3>
-            <span className="aws-badge" style={{ fontSize: '0.65rem' }}>AWS EventBridge</span>
-          </div>
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
-            Scheduled Cron: <code style={{ color: 'var(--accent-warning)', fontSize: '0.75rem' }}>30 3 * * ? *</code> (03:30 UTC = 09:00 IST daily).
-            Target Lambda: <code style={{ color: 'var(--accent-warning)', fontSize: '0.75rem' }}>arn:aws:lambda:ap-south-1:{import.meta.env.VITE_AWS_ACCOUNT_ID || '123456789012'}:function:fleetops-maintenance-scanner</code>.
-          </p>
-        </div>
-        <div style={{ fontSize: '0.85rem', color: 'var(--accent-success)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span className="pulse-dot pulse-green" /> Rule Status: ACTIVE (Healthy)
-        </div>
-      </div>
+
 
       <h2 style={{ marginBottom: '2rem' }}>Maintenance Center</h2>
 
