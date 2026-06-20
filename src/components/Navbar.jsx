@@ -1,10 +1,11 @@
 import React, { useContext, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AppContext } from '../context/AppContext';
+import { authAPI } from '../services/api';
 import TaskDrawer from './TaskDrawer';
 import NotificationCenter from './NotificationCenter';
-import { 
-  Truck, LayoutDashboard, ClipboardList, Wrench, ShieldCheck, LogOut, 
+import {
+  Truck, LayoutDashboard, ClipboardList, Wrench, ShieldCheck, LogOut,
   Menu, Radio
 } from 'lucide-react';
 
@@ -13,8 +14,8 @@ const Navbar = () => {
   const navigate = useNavigate();
   const [isTaskOpen, setIsTaskOpen] = useState(false);
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
+  const handleLogout = async () => {
+    try { await authAPI.logout(); } catch (_) {}
     localStorage.removeItem('username');
     localStorage.removeItem('role');
     dispatch({ type: 'LOGOUT' });

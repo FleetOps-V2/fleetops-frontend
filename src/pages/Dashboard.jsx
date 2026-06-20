@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { vehicleAPI } from '../services/api';
+import { vehicleAPI, taskAPI } from '../services/api';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { AppContext } from '../context/AppContext';
 import { pushNotification } from '../components/NotificationCenter';
@@ -32,26 +32,34 @@ const Dashboard = () => {
 
   useEffect(() => { fetchDashboardData(); }, []);
 
-  const handleSimulateAlerts = () => {
+  const handleBroadcastAlarms = async () => {
     setTriggeringSNS(true);
-    setTimeout(() => {
-      let count = 0;
-      insuranceAlerts.forEach(v => {
-        pushNotification('danger', 'Insurance Expiry Alert',
-          `${v.vehicleNumber} (${v.brand} ${v.model}) expires ${v.insuranceExpiry}`, 'Amazon SNS');
-        count++;
-      });
-      serviceAlerts.forEach(v => {
-        pushNotification('warning', 'Service Due Alert',
-          `${v.vehicleNumber} at ${(v.currentMileage ?? 0).toLocaleString()} km — service overdue`, 'Amazon SNS');
-        count++;
-      });
-      if (count === 0) {
+    try {
+      const res = await taskAPI.broadcastAlarms();
+      const { insuranceAlarmsPublished = 0, serviceAlarmsPublished = 0 } = res.data;
+
+      if (insuranceAlarmsPublished > 0) {
+        pushNotification('danger',
+          `Insurance Alarm Broadcast`,
+          `${insuranceAlarmsPublished} vehicle(s) — SNS notification sent to subscribed managers.`,
+          'Amazon SNS');
+      }
+      if (serviceAlarmsPublished > 0) {
+        pushNotification('warning',
+          `Service Overdue Broadcast`,
+          `${serviceAlarmsPublished} vehicle(s) — SNS notification sent to subscribed managers.`,
+          'Amazon SNS');
+      }
+      if (insuranceAlarmsPublished === 0 && serviceAlarmsPublished === 0) {
         pushNotification('success', 'Fleet Health: OK',
           'EventBridge cron check complete — 0 exceptions found.', 'Amazon SNS');
       }
+    } catch (err) {
+      pushNotification('danger', 'Broadcast Failed',
+        err.response?.data?.message || err.message || 'Failed to publish alarms to SNS');
+    } finally {
       setTriggeringSNS(false);
-    }, 1200);
+    }
   };
 
   if (loading) return <LoadingSpinner fullScreen />;
@@ -86,7 +94,7 @@ const Dashboard = () => {
             </span>
             <button
               className="btn-primary btn-sm"
-              onClick={handleSimulateAlerts}
+              onClick={handleBroadcastAlarms}
               disabled={triggeringSNS}
               aria-busy={triggeringSNS}
               style={{ fontSize: '0.82rem', padding: '0.45rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}

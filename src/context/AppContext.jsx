@@ -4,7 +4,7 @@ import { taskAPI } from '../services/api';
 export const AppContext = createContext();
 
 const initialState = {
-  isAuthenticated: !!localStorage.getItem('token'),
+  isAuthenticated: !!localStorage.getItem('username'),
   username: localStorage.getItem('username') || null,
   role: localStorage.getItem('role') || null,
   cartItemsCount: 0,

@@ -7,7 +7,13 @@ import { logAudit } from '../utils/AuditLogger';
 import { pushNotification } from '../components/NotificationCenter';
 import { Truck, HardHat } from 'lucide-react';
 
-const StepFunctionsTimeline = ({ currentStatus }) => {
+const extractError = (err, fallback) => {
+  const data = err.response?.data;
+  return (typeof data === 'string' ? data : data?.message || data?.error || null)
+    || err.message || fallback;
+};
+
+const StepFunctionsTimeline = ({ currentStatus, executionArn }) => {
   const steps = ['OPEN', 'PENDING_APPROVAL', 'APPROVED', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED'];
   const currentIndex = steps.indexOf(currentStatus);
   
@@ -15,7 +21,10 @@ const StepFunctionsTimeline = ({ currentStatus }) => {
     <div style={{ display: 'flex', flexDirection: 'column', marginTop: '1.25rem', marginBottom: '1.25rem', background: 'rgba(0,0,0,0.15)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
         <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>AWS Step Functions State Machine Execution</span>
-        <span className="aws-badge" style={{ fontSize: '0.62rem', background: 'rgba(236,72,153,0.15)', color: '#ec4899', border: '1px solid rgba(236,72,153,0.3)' }}>Execution ID: fleetops-workflow-{currentStatus.toLowerCase()}</span>
+        <span className="aws-badge" style={{ fontSize: '0.62rem', background: 'rgba(236,72,153,0.15)', color: '#ec4899', border: '1px solid rgba(236,72,153,0.3)', maxWidth: '420px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-block' }}
+          title={executionArn || `fleetops-workflow-${currentStatus.toLowerCase()}`}>
+          {executionArn ? executionArn.split(':').slice(-1)[0] : `fleetops-workflow-${currentStatus.toLowerCase()}`}
+        </span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', width: '100%', padding: '0 10px' }}>
         {/* Connecting line */}
@@ -91,7 +100,7 @@ const Requests = () => {
           // Clear history state so refresh doesn't trigger it again
           navigate(location.pathname, { replace: true, state: {} });
         } catch (e) {
-          pushNotification('danger', 'Request Failed', 'Failed to create request: ' + (e.response?.data || e.message));
+          pushNotification('danger', 'Request Failed', 'Failed to create request: ' + extractError(e, 'unknown error'));
         }
       }
 
@@ -183,7 +192,7 @@ const Requests = () => {
       await loadRequests();
       pushNotification('success', 'Status Updated', 'Request status updated successfully.');
     } catch (err) {
-      pushNotification('danger', 'Update Failed', err.response?.data || err.message || 'Failed to update status');
+      pushNotification('danger', 'Update Failed', extractError(err, 'Failed to update status'));
     } finally {
       setActionLoading('');
     }
@@ -208,7 +217,7 @@ const Requests = () => {
       setAssignModal({ open: false, requestId: null, technician: '' });
       pushNotification('success', 'Technician Assigned', 'Technician has been assigned to the request.');
     } catch (err) {
-      pushNotification('danger', 'Assignment Failed', err.response?.data || err.message || 'Failed to assign technician');
+      pushNotification('danger', 'Assignment Failed', extractError(err, 'Failed to assign technician'));
     } finally {
       setActionLoading('');
     }
@@ -234,7 +243,7 @@ const Requests = () => {
       setCompleteModal({ open: false, requestId: null, resolutionNotes: '', downtimeHours: '' });
       pushNotification('success', 'Request Completed', 'The service request has been marked as completed.');
     } catch (err) {
-      pushNotification('danger', 'Completion Failed', err.response?.data || err.message || 'Failed to complete request');
+      pushNotification('danger', 'Completion Failed', extractError(err, 'Failed to complete request'));
     } finally {
       setActionLoading('');
     }
@@ -307,7 +316,7 @@ const Requests = () => {
                     {req.description}
                   </div>
                 )}
-                <StepFunctionsTimeline currentStatus={req.status} />
+                <StepFunctionsTimeline currentStatus={req.status} executionArn={req.stepFunctionsExecutionArn} />
                 {isManagerOrAdmin && (
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
                     {req.status === 'OPEN' && (

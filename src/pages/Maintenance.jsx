@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { taskAPI, vehicleAPI, requestAPI, aiAPI } from '../services/api';
+import { taskAPI, vehicleAPI, requestAPI, aiAPI, mediaAPI } from '../services/api';
 import { AppContext } from '../context/AppContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { pushNotification } from '../components/NotificationCenter';
@@ -37,67 +37,61 @@ const Maintenance = () => {
   const [aiError, setAiError] = useState('');
   const [addingToQueue, setAddingToQueue] = useState('');
 
-  // EFS Mock Shared storage states
-  const [efsPhotos, setEfsPhotos] = useState([
-    { id: 1, vehicleNum: 'KL-01-AZ-1102', uploaderNode: 'ec2-ap-south-1a-node-01', filename: 'ins_bumper_damage.jpg', timestamp: '2026-06-03 12:15:32 UTC', size: '1.2 MB', mountPoint: '/var/www/fleetops/shared-media' },
-    { id: 2, vehicleNum: 'KL-07-CD-5541', uploaderNode: 'ec2-ap-south-1b-node-02', filename: 'fitness_check_front.jpg', timestamp: '2026-06-03 14:02:11 UTC', size: '2.4 MB', mountPoint: '/var/www/fleetops/shared-media' }
-  ]);
+  // EFS Shared storage states
+  const [efsPhotos, setEfsPhotos] = useState([]);
   const [selectedEfsVehicle, setSelectedEfsVehicle] = useState('');
-  const [efsNode, setEfsNode] = useState('ec2-ap-south-1a-node-01');
+  const [efsNode, setEfsNode] = useState('ec2-us-east-1a-node-01');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [efsFile, setEfsFile] = useState(null);
 
-  const handleEfsUpload = (e) => {
+  const handleEfsUpload = async (e) => {
     e.preventDefault();
-    if (!selectedEfsVehicle) return;
+    if (!selectedEfsVehicle || !efsFile) return;
     setUploadingPhoto(true);
-    
+
     const v = vehicles.find(item => item.id.toString() === selectedEfsVehicle) || vehicles[0];
-    const newPhotoName = `inspection_${v.vehicleNumber}_${Date.now().toString().slice(-4)}.jpg`;
 
-    setTimeout(() => {
-      const newPhoto = {
-        id: Date.now(),
-        vehicleNum: v.vehicleNumber,
-        uploaderNode: efsNode,
-        filename: newPhotoName,
-        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19) + ' UTC',
-        size: '1.8 MB',
-        mountPoint: '/var/www/fleetops/shared-media'
-      };
-
+    try {
+      const res = await mediaAPI.uploadFile(v.vehicleNumber, efsNode, efsFile);
+      const newPhoto = { id: Date.now(), ...res.data };
       setEfsPhotos(prev => [newPhoto, ...prev]);
-      setUploadingPhoto(false);
+      setEfsFile(null);
 
-      // Log CloudTrail Audit Event
       logAudit(
         state.username,
         'WriteSharedFile',
-        `efs://fleetops-shared-filesystem/${newPhotoName}`,
+        `efs://fleetops-shared-filesystem/${res.data.filename}`,
         `Uploaded inspection photo from EC2 node ${efsNode} to shared EFS mount`
       );
 
       pushNotification(
         'success',
-        'EFS Synced',
-        `Shared file synced: ${newPhotoName} instantly readable across all EC2 target groups.`,
+        'EFS Write Complete',
+        `${res.data.filename} written to EFS partition — instantly readable across all EC2 target groups.`,
         'AWS EFS'
       );
-    }, 1200);
+    } catch (err) {
+      pushNotification('danger', 'EFS Upload Failed', extractError(err, 'Failed to write file to EFS partition'));
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   const loadData = async () => {
     try {
       setLoadError('');
-      const [queueRes, insRes, svcRes, vRes] = await Promise.all([
+      const [queueRes, insRes, svcRes, vRes, catalogRes] = await Promise.all([
         taskAPI.getQueue(),
         vehicleAPI.getInsuranceAlerts(),
         vehicleAPI.getServiceAlerts(),
-        vehicleAPI.getVehicles()
+        vehicleAPI.getVehicles(),
+        mediaAPI.getCatalog().catch(() => ({ data: [] })),
       ]);
       setQueue(queueRes.data);
       setInsuranceAlerts(Array.isArray(insRes.data) ? insRes.data : []);
       setServiceAlerts(Array.isArray(svcRes.data) ? svcRes.data : []);
-      
+      setEfsPhotos(Array.isArray(catalogRes.data) ? catalogRes.data.map((f, i) => ({ id: i, ...f })) : []);
+
       const fleet = Array.isArray(vRes.data) ? vRes.data : [];
       setVehicles(fleet);
       if (fleet.length > 0) {
@@ -597,7 +591,7 @@ const Maintenance = () => {
               <HardDrive size={20} color="var(--accent-purple)" /> Shared Inspection Media Vault
             </h3>
             <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              Shared Filesystem Mount: <code style={{ color: 'var(--accent-purple)' }}>/var/www/fleetops/shared-media</code> mounted to Elastic File System ID: <code style={{ color: 'var(--accent-purple)' }}>fs-092df8761a293b</code>
+              Shared Filesystem Mount: <code style={{ color: 'var(--accent-purple)' }}>/var/www/fleetops/shared-media</code> mounted to Elastic File System ID: <code style={{ color: 'var(--accent-purple)' }}>{import.meta.env.VITE_EFS_ID || 'N/A'}</code>
             </p>
           </div>
           <span className="aws-badge" style={{ background: 'rgba(168,85,247,0.1)', color: 'var(--accent-purple)', border: '1px solid rgba(168,85,247,0.2)', fontSize: '0.75rem' }}>
@@ -645,7 +639,7 @@ const Maintenance = () => {
             )}
           </div>
 
-          {/* Simulate EFS write panel */}
+          {/* EFS write panel — real disk write to shared mount */}
           <div style={{ background: 'var(--bg-elevated)', borderRadius: '8px', padding: '1.25rem', border: '1px solid var(--glass-border)' }}>
             <h4 style={{ fontSize: '0.9rem', marginTop: 0, marginBottom: '1rem' }}>Write new Inspection Photo</h4>
             
@@ -672,9 +666,20 @@ const Maintenance = () => {
                   onChange={(e) => setEfsNode(e.target.value)}
                   style={{ fontSize: '0.8rem', padding: '0.4rem' }}
                 >
-                  <option value="ec2-ap-south-1a-node-01">ec2-ap-south-1a-node-01 (AZ-A)</option>
-                  <option value="ec2-ap-south-1b-node-02">ec2-ap-south-1b-node-02 (AZ-B)</option>
+                  <option value="ec2-us-east-1a-node-01">ec2-us-east-1a-node-01 (AZ-A)</option>
+                  <option value="ec2-us-east-1b-node-02">ec2-us-east-1b-node-02 (AZ-B)</option>
                 </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Select Inspection Photo</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setEfsFile(e.target.files?.[0] || null)}
+                  style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', width: '100%' }}
+                  required
+                />
               </div>
 
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.15)', padding: '8px', borderRadius: '4px', borderLeft: '3px solid var(--accent-warning)' }}>
@@ -684,7 +689,7 @@ const Maintenance = () => {
               <button
                 type="submit"
                 className="btn-primary"
-                disabled={uploadingPhoto || !selectedEfsVehicle}
+                disabled={uploadingPhoto || !selectedEfsVehicle || !efsFile}
                 style={{ fontSize: '0.8rem', padding: '0.6rem' }}
               >
                 {uploadingPhoto ? 'Writing to Shared Mount...' : 'Write File to EFS Partition'}

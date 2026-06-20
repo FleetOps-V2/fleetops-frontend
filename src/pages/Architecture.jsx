@@ -33,7 +33,7 @@ const ARCHITECTURE_FLOWS = [
     ],
     awsDetails: [
       { name: 'Amazon EventBridge Rule', value: 'daily-insurance-cron', desc: 'Cron expression: cron(0 6 * * ? *)' },
-      { name: 'AWS Lambda Runtime', value: 'Node.js 18.x (256 MB RAM)', desc: 'Severless compute executing database scans.' },
+      { name: 'AWS Lambda Runtime', value: 'Node.js 22.x (256 MB RAM)', desc: 'Serverless compute executing database scans.' },
       { name: 'Amazon SNS Topic', value: 'fleetops-alerts-topic', desc: 'Publishes alarms to subscribed SMS and emails.' }
     ]
   },

@@ -41,7 +41,7 @@ const App = () => {
 
           {/* Manager + Admin */}
           <Route path="/dashboard" element={
-            <ProtectedRoute requireAdmin={false}><Dashboard /></ProtectedRoute>
+            <ProtectedRoute allowedRoles={['ADMIN', 'MANAGER']}><Dashboard /></ProtectedRoute>
           } />
 
           {/* Admin-only pages */}

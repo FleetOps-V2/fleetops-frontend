@@ -8,10 +8,11 @@ const normalizedBaseUrl = rawBaseUrl.endsWith('/') && rawBaseUrl !== '/'
 const api = axios.create({
   baseURL: normalizedBaseUrl || '/',
   timeout: 10000,
+  withCredentials: true,  // send httpOnly JWT cookie on every request
 });
 
 // ----------------------------------------------------
-// Request Interceptor: Attach JWT Bearer Token
+// Request Interceptor: Guard against double /api prefix
 // ----------------------------------------------------
 api.interceptors.request.use(
   (config) => {
@@ -21,11 +22,6 @@ api.interceptors.request.use(
       if (base.endsWith('/api') && config.url.startsWith('/api/')) {
         config.url = config.url.replace(/^\/api/, '');
       }
-    }
-
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
@@ -39,7 +35,6 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      localStorage.removeItem('token');
       localStorage.removeItem('username');
       localStorage.removeItem('role');
       window.dispatchEvent(new Event('auth-expired'));
@@ -53,6 +48,7 @@ api.interceptors.response.use(
 // ----------------------------------------------------
 export const authAPI = {
   login:    (credentials) => api.post('/api/auth/login', credentials),
+  logout:   ()            => api.post('/api/auth/logout'),
   register: (data)        => api.post('/api/auth/register', data),
   getMe:    ()            => api.get('/api/auth/me'),
 };
@@ -77,10 +73,11 @@ export const vehicleAPI = {
 // Maintenance Task API
 // ----------------------------------------------------
 export const taskAPI = {
-  getQueue:   ()         => api.get('/api/tasks'),
-  addTask:    (data)     => api.post('/api/tasks/add', data),
-  removeTask: (taskId)   => api.delete(`/api/tasks/remove/${taskId}`),
-  clearQueue: ()         => api.delete('/api/tasks/clear'),
+  getQueue:        ()       => api.get('/api/tasks'),
+  addTask:         (data)   => api.post('/api/tasks/add', data),
+  removeTask:      (taskId) => api.delete(`/api/tasks/remove/${taskId}`),
+  clearQueue:      ()       => api.delete('/api/tasks/clear'),
+  broadcastAlarms: ()       => api.post('/api/tasks/alarms/broadcast'),
 };
 
 // ----------------------------------------------------
@@ -106,6 +103,20 @@ export const trackingAPI = {
   ping: (payload) => api.post('/api/tracking/ping', payload),
   getLive: ()     => api.get('/api/tracking/live'),
   getVehicle: (id)=> api.get(`/api/tracking/vehicle/${id}`),
+};
+
+// ----------------------------------------------------
+// EFS Media API
+// ----------------------------------------------------
+export const mediaAPI = {
+  getCatalog: () => api.get('/api/media/catalog'),
+  uploadFile: (vehicleNumber, ec2Node, file) => {
+    const form = new FormData();
+    form.append('vehicleNumber', vehicleNumber);
+    form.append('ec2Node', ec2Node);
+    form.append('file', file);
+    return api.post('/api/media/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
 };
 
 // ----------------------------------------------------

@@ -46,7 +46,7 @@ const Admin = () => {
       setLoading(true);
       setLoadError('');
       const params = {};
-      if (search.trim()) params.driverId = search;
+      if (search.trim()) params.search = search;
       if (statusFilter.trim()) params.status = statusFilter;
       const res = await vehicleAPI.getVehicles(params);
       if (!Array.isArray(res.data)) {

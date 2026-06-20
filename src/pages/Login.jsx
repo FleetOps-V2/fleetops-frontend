@@ -27,7 +27,6 @@ const Login = () => {
     try {
       if (isLogin) {
         const res = await authAPI.login({ username: formData.username, password: formData.password });
-        localStorage.setItem('token', res.data.token);
         localStorage.setItem('username', res.data.username);
         localStorage.setItem('role', res.data.role);
         dispatch({ type: 'LOGIN', payload: { username: res.data.username, role: res.data.role } });

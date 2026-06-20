@@ -2,18 +2,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Bell, MailOpen, ShieldAlert, AlertTriangle, Info, CheckCircle } from 'lucide-react';
 
 /**
- * NotificationCenter — Simulates an SNS notification inbox.
+ * NotificationCenter — In-app notification inbox.
  *
  * Business Requirement:
  *   Operations team needs to be alerted when:
  *   - Insurance expires within 30 days
  *   - Vehicle is overdue for service
- *   - CloudWatch alarm fires (high latency / CPU)
+ *   - A service request transitions state
  *
  * AWS Mapping:
  *   EventBridge rule → Lambda → SNS Topic → Email/SMS
- *   In production, SNS delivers to email. Here we simulate
- *   the same events arriving in a real-time inbox.
+ *   SNS delivers to subscribed email/SMS channels. This inbox
+ *   mirrors the same events as in-app notifications.
  *
  * Usage:
  *   Dispatch a global event from anywhere:
@@ -147,7 +147,9 @@ export default function NotificationCenter() {
                   </span>
                   <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{fmt(item.timestamp)}</span>
                 </div>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>{item.body}</p>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
+                  {typeof item.body === 'string' ? item.body : (item.body?.message || item.body?.error || JSON.stringify(item.body))}
+                </p>
                 <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>via {item.source}</span>
               </div>
             ))}
