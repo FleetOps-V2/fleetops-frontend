@@ -10,7 +10,7 @@ const FEATURES = [
     icon: Truck,
     title: 'Fleet Management',
     desc: 'Register vehicles, track mileage, monitor insurance expiry, and manage documents.',
-    aws: ['ECS Fargate', 'RDS PostgreSQL', 'ElastiCache Redis', 'Amazon S3'],
+    aws: ['Amazon EKS', 'RDS PostgreSQL', 'Amazon S3', 'Amazon Bedrock'],
     link: '/vehicles',
     color: '#3b82f6',
     roles: ['DRIVER','MANAGER','ADMIN','ROLE_DRIVER','ROLE_MANAGER','ROLE_ADMIN'],
@@ -156,9 +156,10 @@ export default function Home() {
             {[
               { req: 'Vehicle lists queried thousands of times per day', svc: 'Distributed Cache (ElastiCache)', why: 'Memory cache reduces database read operations. 5-minute TTL.', color: '#f59e0b' },
               { req: 'Insurance expires — nobody checks manually', svc: 'Alert Scheduler (EventBridge + Lambda)', why: 'Daily cron scheduler triggers lambda scans to publish manager alert notifications.', color: '#ec4899' },
-              { req: 'Store RC, Insurance, Fitness Cert per vehicle', svc: 'Secure Storage (Amazon S3)', why: 'Documents stored in private S3 bucket. Lifecycle moves aging items to Glacier to save cost.', color: '#3b82f6' },
+              { req: 'RC Book, insurance, and permit documents stored per vehicle', svc: 'Object Storage (Amazon S3)', why: 'Presigned PUT URLs let the browser upload directly to S3. KMS-encrypted, versioned, with lifecycle archival to STANDARD_IA after 30 days.', color: '#ff9900' },
+              { req: 'Inspection photos and service reports stored per maintenance job', svc: 'Shared File Storage (Amazon EFS)', why: 'EFS mount on maintenance-service pods. ReadWriteMany, KMS encrypted, persists across pod restarts.', color: '#3b82f6' },
               { req: 'Manage request workflows across stages safely', svc: 'State Machine (Step Functions)', why: 'Orchestrates approvals and tasks without hardcoding state checks.', color: '#8b5cf6' },
-              { req: 'Process rapid real-time vehicle GPS coordinates', svc: 'IoT Queue (SQS FIFO + DynamoDB)', why: 'Decouples heavy writes from core DB; stores points in NoSQL tables.', color: '#06b6d4' },
+              { req: 'AI-driven fleet health analysis on demand', svc: 'AI Fleet Advisor (Amazon Bedrock)', why: 'Nova Lite model analyses vehicle data and returns health scores with prioritised maintenance recommendations.', color: '#06b6d4' },
             ].map(item => (
               <div key={item.svc} className="glass-panel" style={{ padding: '1.1rem' }}>
                 <span className="aws-badge" style={{ marginBottom: '0.6rem', display: 'inline-block', borderColor: item.color + '55', color: item.color, background: item.color + '15' }}>

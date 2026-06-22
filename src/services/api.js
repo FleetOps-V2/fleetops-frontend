@@ -106,7 +106,7 @@ export const trackingAPI = {
 };
 
 // ----------------------------------------------------
-// EFS Media API
+// EFS Media API  (maintenance-service: inspection photos, service reports)
 // ----------------------------------------------------
 export const mediaAPI = {
   getCatalog: () => api.get('/api/media/catalog'),
@@ -117,6 +117,28 @@ export const mediaAPI = {
     form.append('file', file);
     return api.post('/api/media/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
+};
+
+// ----------------------------------------------------
+// S3 Vehicle Documents API  (vehicle-service: presigned URL flow)
+// Browser PUTs file directly to S3 — no file bytes through Spring Boot.
+// ----------------------------------------------------
+export const documentAPI = {
+  getPresignedUrl: (vehicleNumber, docType, filename) =>
+    api.post('/api/documents/presigned-url', null, {
+      params: { vehicleNumber, docType, filename },
+    }),
+  listDocuments: (vehicleNumber) =>
+    api.get(`/api/documents/vehicle/${vehicleNumber}`),
+  uploadToS3: (presignedUrl, file) =>
+    fetch(presignedUrl, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    }).then(res => {
+      if (!res.ok) throw new Error(`S3 upload failed: ${res.status}`);
+      return res;
+    }),
 };
 
 // ----------------------------------------------------

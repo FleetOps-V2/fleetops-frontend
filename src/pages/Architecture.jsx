@@ -6,19 +6,35 @@ import {
 
 const ARCHITECTURE_FLOWS = [
   {
-    id: 'documents',
-    title: 'Vehicle Documents Storage',
-    desc: 'Driver uploads registration certificates, permits, and insurance policies for compliance reviews.',
+    id: 'vehicle-docs',
+    title: 'Vehicle Document Storage',
+    desc: 'Drivers and managers upload RC Books, insurance certificates, fitness certificates, and permits — stored directly in S3 via presigned URLs.',
     steps: [
-      { name: '1. FleetOps Client', service: 'React Frontend / CloudFront', desc: 'Driver uploads PDF/image document from the vehicles interface.' },
-      { name: '2. Security Guard', service: 'AWS WAF & IAM Authorization', desc: 'Inspects requests for exploits; checks IAM permissions for upload endpoint.' },
-      { name: '3. Core Storage', service: 'Amazon S3 (fleetops-documents-prod)', desc: 'Stores documents securely with Versioning enabled. Encrypted with KMS Key.' },
-      { name: '4. Lifecycle Policy', service: 'S3 Lifecycle Rules', desc: 'Automatically transitions files to Standard-IA after 30 days, and archives to Glacier after 90 days to minimize storage costs.' }
+      { name: '1. FleetOps Client', service: 'React Frontend — Vehicle Card', desc: 'User selects a document type and file. The browser requests a presigned PUT URL from the vehicle-service backend.' },
+      { name: '2. Presigned URL', service: 'Vehicle Service — POST /api/documents/presigned-url', desc: 'Spring Boot generates a 15-minute presigned S3 PUT URL using IRSA credentials. Returns { uploadUrl, key } to the browser.' },
+      { name: '3. Direct S3 Upload', service: 'Browser → Amazon S3 (presigned PUT)', desc: 'The browser PUTs the file bytes directly to S3. No file data passes through Spring Boot, keeping the pod stateless.' },
+      { name: '4. List Documents', service: 'Vehicle Service — GET /api/documents/vehicle/{id}', desc: 'Frontend polls S3 object list via the backend, which calls ListObjectsV2 scoped to the vehicle number prefix.' }
     ],
     awsDetails: [
-      { name: 'Amazon S3 Bucket', value: 'fleetops-documents-prod', desc: 'Secure document vault with KMS-SSE key encryption.' },
-      { name: 'S3 Lifecycle Policy', value: '30 Days → IA, 90 Days → Glacier', desc: 'Automated cost optimization storage tiering.' },
-      { name: 'AWS WAF WebACL', value: 'fleetops-web-acl', desc: 'Edge defense protecting against malicious uploads or query injection.' }
+      { name: 'Amazon S3 Bucket', value: 'fleetops-prod-vehicle-docs', desc: 'KMS-encrypted, versioned. Object key: {vehicleNumber}/{docType}/{timestamp}-{filename}.' },
+      { name: 'S3 Bucket Policy', value: 'Private — no public access', desc: 'All access via IRSA presigned URLs only. Block public ACLs enforced.' },
+      { name: 'Lifecycle Policy', value: 'STANDARD_IA after 30 days, expire at 365', desc: 'Old versions of overwritten documents archived then purged automatically.' }
+    ]
+  },
+  {
+    id: 'documents',
+    title: 'Maintenance Media Storage',
+    desc: 'Maintenance team uploads service photos, inspection reports, and vehicle condition media for record-keeping.',
+    steps: [
+      { name: '1. FleetOps Client', service: 'React Frontend / CloudFront', desc: 'Maintenance staff uploads a file via the Maintenance Center document interface.' },
+      { name: '2. Security Guard', service: 'AWS WAF & JWT Auth Filter', desc: 'WAF inspects the request at edge; JWT filter validates the Bearer token before the upload reaches the service.' },
+      { name: '3. Core Storage', service: 'Maintenance Service → Amazon EFS', desc: 'POST /api/media/* writes the file to the EFS shared mount at /var/www/fleetops/shared-media. Persists across pod restarts.' },
+      { name: '4. Durable Mount', service: 'EFS Access Point (KMS encrypted)', desc: 'EFS access point scoped to /fleetops (uid:1000) provides ReadWriteMany access — all maintenance-service pod replicas share the same file storage.' }
+    ],
+    awsDetails: [
+      { name: 'Amazon EFS File System', value: 'fleetops-prod (CSI driver mounted)', desc: 'ReadWriteMany persistent volume shared across all maintenance-service pods.' },
+      { name: 'EFS Access Point', value: '/fleetops (uid:1000, gid:1000)', desc: 'Scoped access point with KMS encryption at rest.' },
+      { name: 'AWS WAF WebACL', value: 'fleetops-web-acl', desc: 'Edge defense protecting against malicious uploads or injection attacks.' }
     ]
   },
   {
@@ -44,29 +60,29 @@ const ARCHITECTURE_FLOWS = [
     steps: [
       { name: '1. Request Opened', service: 'FleetOps Core API', desc: 'Manager submits a new maintenance ticket in the app.' },
       { name: '2. Orchestrator', service: 'AWS Step Functions (fleetops-request-workflow)', desc: 'Triggers state machine instance to control state flow.' },
-      { name: '3. Conditional Gate', service: 'Decision Choice State', desc: 'Evaluates cost threshold; if >$500, stalls for manager override signature.' },
-      { name: '4. Dispatch Notification', service: 'Amazon SES target', desc: 'Emails notifications to assignment technicians when tickets transition to ASSIGNED.' }
+      { name: '3. State Tracking', service: 'Step Functions Execution Record', desc: 'Step Functions records each stage transition: OPEN → PENDING_APPROVAL → APPROVED → ASSIGNED → IN_PROGRESS → COMPLETED. Execution ARN stored on the request entity.' },
+      { name: '4. Maintenance Dispatch', service: 'Maintenance Service REST API', desc: 'On ASSIGNED status, request-service calls POST /api/tasks/add on maintenance-service to create a task in the technician\'s queue.' }
     ],
     awsDetails: [
       { name: 'AWS Step Functions Machine', value: 'fleetops-request-workflow', desc: 'Amazon States Language (ASL) workflow definition.' },
       { name: 'Execution History', value: '90-day persistence logs', desc: 'Enables auditing of transitions and processing latency.' },
-      { name: 'Integration Target', value: 'Amazon SES SMTP relay', desc: 'Dispatches ticket closure receipts.' }
+      { name: 'Status Sync', value: 'Vehicle Service PATCH /status', desc: 'Vehicle status updated to IN_SERVICE or ACTIVE as request progresses.' }
     ]
   },
   {
     id: 'telemetry',
     title: 'GPS Tracking Telemetry Pipeline',
-    desc: 'Processes rapid coordinate pings from vehicles on transit to update live dashboards and tracks.',
+    desc: 'Processes real-time coordinate pings from fleet vehicles and serves live positions to the dashboard.',
     steps: [
-      { name: '1. Simulator Ping', service: 'IoT Telemetry Simulator', desc: 'Vehicles transmit latency pings with coordinates at 2-second intervals.' },
-      { name: '2. Buffer Queue', service: 'Amazon SQS FIFO (fleetops-maintenance-queue.fifo)', desc: 'Safeguards database by buffering peaks and preventing message loss.' },
-      { name: '3. Consumer Function', service: 'AWS Lambda (telemetry-processor)', desc: 'Batches messages and updates status keys.' },
-      { name: '4. NoSQL Storage', service: 'Amazon DynamoDB (fleetops-trips-telemetry)', desc: 'Stores time-series coordinates for map path rendering.' }
+      { name: '1. Simulator Ping', service: 'Frontend GPS Simulator', desc: 'Frontend sends GPS pings every 4 seconds to the tracking API for each active vehicle.' },
+      { name: '2. Tracking API', service: 'Vehicle Service — POST /api/tracking/ping', desc: 'Spring Boot endpoint receives the ping, derives status from speed (IDLE / EN_ROUTE / SPEEDING), and persists to PostgreSQL.' },
+      { name: '3. Persistence', service: 'RDS PostgreSQL — vehicle_telemetry table', desc: 'Telemetry rows stored with vehicleId, lat/lng, speed, engineTemp, and recordedAt. Indexed for fast per-vehicle queries.' },
+      { name: '4. Live Dashboard', service: 'GET /api/tracking/live — polled every 3s', desc: 'Frontend polls the live endpoint which returns the latest position per vehicle. Map markers update in real time.' }
     ],
     awsDetails: [
-      { name: 'Amazon SQS Queue', value: 'fleetops-maintenance-queue.fifo', desc: 'First-in-first-out delivery guaranteeing message ordering.' },
-      { name: 'Amazon DynamoDB Table', value: 'fleetops-trips-telemetry', desc: 'High write throughput table with Partition Key vehicleId.' },
-      { name: 'TTL (Time To Live)', value: '90 Days Retention', desc: 'DynamoDB automatically evicts telemetry older than 90 days.' }
+      { name: 'RDS PostgreSQL 15', value: 'vehicle_telemetry table', desc: 'Indexed on vehicle_id and recorded_at for fast latest-per-vehicle queries.' },
+      { name: 'Amazon EKS Pod', value: 'fleetops-vehicle-service', desc: 'Spring Boot service handling ping ingestion and live position queries via IRSA.' },
+      { name: 'Phase 5 Path', value: 'SQS FIFO → Lambda → DynamoDB', desc: 'Same API contract (/api/tracking/ping, /api/tracking/live) — only the backend implementation changes.' }
     ]
   }
 ];
@@ -201,7 +217,7 @@ const Architecture = () => {
         <div>
           <strong style={{ fontSize: '0.88rem', display: 'block', marginBottom: '2px' }}>Reviewer Verification Guidance</strong>
           <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-            To verify these integrations during evaluations, present the corresponding business feature screens in FleetOps (e.g., uploading a vehicle document or triggering a service request), then transition to the AWS Management Console to demonstrate the real S3 buckets, Step Functions execution logs, or CloudWatch triggers operating in the background.
+            To verify these integrations during evaluations, present the corresponding business feature screens in FleetOps (e.g., uploading a vehicle document from the Vehicle Card to S3, uploading a media file in Maintenance to EFS, triggering a service request through Step Functions, or viewing live GPS positions), then transition to the AWS Management Console to demonstrate the S3 bucket contents, Step Functions execution logs, EFS mount targets, or EventBridge + Lambda triggers operating in the background.
           </span>
         </div>
       </div>

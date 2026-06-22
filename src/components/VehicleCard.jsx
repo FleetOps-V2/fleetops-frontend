@@ -1,54 +1,99 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { logAudit } from '../utils/AuditLogger';
+import { pushNotification } from './NotificationCenter';
+import { documentAPI } from '../services/api';
 import { FolderOpen, Upload, RefreshCw } from 'lucide-react';
+
+const inferDocType = (filename) => {
+  const ext = filename.split('.').pop().toLowerCase();
+  if (['jpg', 'jpeg', 'png'].includes(ext)) return 'Photo';
+  if (ext === 'pdf') return 'PDF Document';
+  return 'Document';
+};
+
+const formatBytes = (bytes) => {
+  if (!bytes) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+};
+
+const serverDocToDoc = (item) => ({
+  name: item.filename,
+  size: formatBytes(item.size),
+  type: item.docType || inferDocType(item.filename),
+  storageClass: 'S3 Standard',
+  uploadDate: item.lastModified ? item.lastModified.substring(0, 10) : '—',
+  securePath: `s3://vehicle-docs/${item.key}`,
+});
 
 const VehicleCard = ({ vehicle, onRequestService }) => {
   const { state } = useContext(AppContext);
   const isDriver = state.role === 'DRIVER' || state.role === 'ROLE_DRIVER';
+  const isAdmin  = state.role === 'ADMIN'  || state.role === 'ROLE_ADMIN';
 
-  const isAdmin = state.role === 'ADMIN' || state.role === 'ROLE_ADMIN';
+  const [showDocs, setShowDocs]       = useState(false);
+  const [uploading, setUploading]     = useState(false);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [docType, setDocType]         = useState('RC Book');
+  const [docs, setDocs]               = useState([]);
 
-  const [showDocs, setShowDocs] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [docType, setDocType] = useState('RC Book');
-  const [docs, setDocs] = useState([
-    { name: 'RC_Book.pdf', size: '2.4 MB', type: 'RC Book', storageClass: 'S3 Standard', uploadDate: '2026-05-15', securePath: `s3://fleetops-documents-prod/vehicles/${vehicle.id}/RC_Book.pdf` },
-    { name: 'Insurance_Policy.pdf', size: '1.8 MB', type: 'Insurance', storageClass: 'S3 Standard', uploadDate: '2026-05-20', securePath: `s3://fleetops-documents-prod/vehicles/${vehicle.id}/Insurance_Policy.pdf` }
-  ]);
+  useEffect(() => {
+    if (!showDocs) return;
+    let cancelled = false;
+    setLoadingDocs(true);
+    documentAPI.listDocuments(vehicle.vehicleNumber)
+      .then(res => {
+        if (cancelled) return;
+        setDocs((res.data || []).map(serverDocToDoc));
+      })
+      .catch(() => {
+        if (!cancelled) pushNotification('danger', 'Load Failed', 'Could not load documents from S3.', 'Documents API');
+      })
+      .finally(() => { if (!cancelled) setLoadingDocs(false); });
+    return () => { cancelled = true; };
+  }, [showDocs, vehicle.vehicleNumber]);
 
   const statusColors = {
-    ACTIVE: 'var(--accent-success)',
+    ACTIVE:     'var(--accent-success)',
     IN_SERVICE: 'var(--accent-warning)',
-    BREAKDOWN: 'var(--accent-danger)',
-    RETIRED: 'var(--text-muted)'
+    BREAKDOWN:  'var(--accent-danger)',
+    RETIRED:    'var(--text-muted)'
   };
 
-  const handleUpload = (e) => {
+  const handleUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     setUploading(true);
-    setTimeout(() => {
+    try {
+      const { data } = await documentAPI.getPresignedUrl(vehicle.vehicleNumber, docType, file.name);
+      await documentAPI.uploadToS3(data.uploadUrl, file);
+
       const newDoc = {
         name: file.name,
-        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+        size: formatBytes(file.size),
         type: docType,
         storageClass: 'S3 Standard',
         uploadDate: new Date().toISOString().split('T')[0],
-        securePath: `s3://fleetops-documents-prod/vehicles/${vehicle.id}/${file.name}`
+        securePath: `s3://vehicle-docs/${data.key}`,
       };
       setDocs(prev => [...prev, newDoc]);
-      setUploading(false);
 
-      // Log CloudTrail Audit Event
       logAudit(
         state.username,
         'PutObject',
-        `s3://fleetops-documents-prod/vehicles/${vehicle.id}/${file.name}`,
-        `Uploaded ${docType} file to S3 bucket fleetops-documents-prod`
+        `s3://vehicle-docs/${data.key}`,
+        `Uploaded ${docType} to S3 vehicle-docs bucket`
       );
-    }, 1500);
+      pushNotification('success', 'Document Uploaded', `${file.name} stored in S3.`, 'Documents API');
+    } catch {
+      pushNotification('danger', 'Upload Failed', 'Could not upload document to S3.', 'Documents API');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
   };
 
   return (
@@ -61,9 +106,9 @@ const VehicleCard = ({ vehicle, onRequestService }) => {
               {vehicle.vehicleNumber}
             </span>
           </div>
-          <span style={{ 
-            fontSize: '0.8rem', 
-            fontWeight: 'bold', 
+          <span style={{
+            fontSize: '0.8rem',
+            fontWeight: 'bold',
             color: statusColors[vehicle.status] || 'white',
             background: `${statusColors[vehicle.status]}22`,
             padding: '4px 8px',
@@ -73,7 +118,7 @@ const VehicleCard = ({ vehicle, onRequestService }) => {
             {vehicle.status}
           </span>
         </div>
-        
+
         <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span>Type:</span>
@@ -88,20 +133,20 @@ const VehicleCard = ({ vehicle, onRequestService }) => {
             <span style={{ color: 'var(--text-primary)' }}>{vehicle.assignedDriverId || 'Unassigned'}</span>
           </div>
         </div>
-        
+
         <div style={{ marginTop: 'auto', paddingTop: '1.5rem' }}>
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
-            <button 
+            <button
               className="btn-secondary btn-sm"
               onClick={() => setShowDocs(!showDocs)}
               style={{ flexGrow: 1, padding: '0.5rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
             >
-              <FolderOpen size={13} strokeWidth={2} /> Document Center ({docs.length})
+              <FolderOpen size={13} strokeWidth={2} /> Document Vault ({docs.length})
             </button>
-            
+
             {isDriver && vehicle.status === 'ACTIVE' && vehicle.assignedDriverId === state.username && (
-              <button 
-                className="btn-primary btn-sm" 
+              <button
+                className="btn-primary btn-sm"
                 onClick={onRequestService}
                 style={{ flexGrow: 1.5, padding: '0.5rem', fontSize: '0.8rem' }}
               >
@@ -109,7 +154,7 @@ const VehicleCard = ({ vehicle, onRequestService }) => {
               </button>
             )}
           </div>
-          
+
           {isDriver && vehicle.status !== 'ACTIVE' && vehicle.assignedDriverId === state.username && (
             <div style={{ textAlign: 'center', color: 'var(--accent-warning)', fontSize: '0.9rem', marginTop: '0.75rem' }}>
               Currently {vehicle.status.replace('_', ' ')}
@@ -118,17 +163,20 @@ const VehicleCard = ({ vehicle, onRequestService }) => {
         </div>
       </div>
 
-      {/* Clean Document Storage Drawer Panel */}
       {showDocs && (
         <div className="doc-panel" style={{ background: 'rgba(0,0,0,0.2)', padding: '1.2rem', borderTop: '1px solid var(--glass-border)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
             <span style={{ fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-              S3 Object Registry
+              Document Vault
             </span>
-            <span className="aws-badge" style={{ fontSize: '0.65rem', background: 'rgba(59,130,246,0.2)', color: '#3b82f6', border: '1px solid rgba(59,130,246,0.3)' }}>S3 + KMS + CloudFront</span>
+            <span className="aws-badge" style={{ fontSize: '0.65rem', background: 'rgba(255,153,0,0.15)', color: '#ff9900', border: '1px solid rgba(255,153,0,0.3)' }}>S3 + KMS</span>
           </div>
 
-          {docs.length === 0 ? (
+          {loadingDocs ? (
+            <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+              <RefreshCw size={13} className="spin-icon" /> Loading from S3...
+            </div>
+          ) : docs.length === 0 ? (
             <div style={{ padding: '1rem', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               No documents stored.
             </div>
@@ -144,23 +192,6 @@ const VehicleCard = ({ vehicle, onRequestService }) => {
                     <span>Type: {doc.type}</span>
                     {isAdmin && <span>Tier: <strong style={{ color: 'var(--accent-success)' }}>{doc.storageClass}</strong></span>}
                   </div>
-                  
-                  {/* Backup / lifecycle timeline info */}
-                  {isAdmin && (
-                    <div style={{ marginTop: '6px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: 'var(--text-muted)', marginBottom: '2px' }}>
-                        <span>Active</span>
-                        <span>Infrequent Access (30d)</span>
-                        <span>Archive (90d)</span>
-                      </div>
-                      <div className="lifecycle-track">
-                        <div className="lifecycle-standard" style={{ width: '33.3%' }}></div>
-                        <div className="lifecycle-ia" style={{ width: '33.3%' }}></div>
-                        <div className="lifecycle-glacier" style={{ width: '33.3%' }}></div>
-                      </div>
-                    </div>
-                  )}
-
                   {isAdmin && (
                     <div style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'var(--accent-primary)', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       Path: {doc.securePath}
@@ -171,7 +202,6 @@ const VehicleCard = ({ vehicle, onRequestService }) => {
             </div>
           )}
 
-          {/* Document Upload Interface */}
           {state.isAuthenticated && (
             <div style={{ borderTop: '1px dashed var(--glass-border)', paddingTop: '0.75rem' }}>
               <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '0.5rem' }}>
@@ -187,10 +217,10 @@ const VehicleCard = ({ vehicle, onRequestService }) => {
                   <option value="Permits">Permits</option>
                 </select>
               </div>
-              <label htmlFor={`upload-doc-${vehicle.id}`} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', cursor: 'pointer', opacity: uploading ? 0.6 : 1, fontSize: '0.75rem', padding: '0.4rem' }}>
+              <label htmlFor={`upload-doc-${vehicle.id}`} className="btn-secondary btn-sm" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.6 : 1, fontSize: '0.75rem', padding: '0.4rem' }}>
                 {uploading ? (
                   <>
-                    <RefreshCw size={13} strokeWidth={2} className="spin-icon" /> Uploading Document...
+                    <RefreshCw size={13} strokeWidth={2} className="spin-icon" /> Uploading to S3...
                   </>
                 ) : (
                   <>
