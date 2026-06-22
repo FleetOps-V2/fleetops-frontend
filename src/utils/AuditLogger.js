@@ -31,14 +31,13 @@ export function logAudit(username, action, resource, detail = '', success = true
     success,
   };
 
-  const token = localStorage.getItem('token');
-  if (token) {
-    fetch('/api/audit/events', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body:    JSON.stringify(entry),
-    }).catch(() => {}); // fire and forget — never block the UI
-  }
+  // jwt cookie (httpOnly, SameSite=Strict) is sent automatically for same-origin requests
+  fetch('/api/audit/events', {
+    method:      'POST',
+    credentials: 'same-origin',
+    headers:     { 'Content-Type': 'application/json' },
+    body:        JSON.stringify(entry),
+  }).catch(() => {}); // fire and forget — never block the UI
 
   return entry;
 }

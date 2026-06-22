@@ -27,6 +27,7 @@ const Login = () => {
     try {
       if (isLogin) {
         const res = await authAPI.login({ username: formData.username, password: formData.password });
+        localStorage.removeItem('token'); // clear any stale Bearer token from old versions
         localStorage.setItem('username', res.data.username);
         localStorage.setItem('role', res.data.role);
         dispatch({ type: 'LOGIN', payload: { username: res.data.username, role: res.data.role } });
