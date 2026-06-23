@@ -138,8 +138,7 @@ const Maintenance = () => {
       pushNotification(
         'info',
         'Queue Updated',
-        `Added pending ${selectedTaskType} task for ${vehicle?.vehicleNumber} to queue.`,
-        'AWS EventBridge'
+        `Added pending ${selectedTaskType} task for ${vehicle?.vehicleNumber} to queue.`
       );
     } catch (err) {
       pushNotification('danger', 'Task Failed', extractError(err, 'Failed to add task'));
@@ -222,7 +221,7 @@ const Maintenance = () => {
         description: rec.action,
       });
       setQueue(res.data);
-      pushNotification('info', 'Added to Queue', `${rec.vehicleNumber} — ${rec.taskType} queued.`, 'AWS EventBridge');
+      pushNotification('info', 'Added to Queue', `${rec.vehicleNumber} — ${rec.taskType} queued.`, 'Amazon Bedrock');
     } catch (err) {
       pushNotification('danger', 'Queue Failed', extractError(err, 'Failed to add task'));
     } finally {
@@ -247,8 +246,7 @@ const Maintenance = () => {
       pushNotification(
         'success',
         'Request Formalized',
-        `Successfully escalated ${task.taskType} for ${vNum} into a real Service Request.`,
-        'AWS EventBridge'
+        `Successfully escalated ${task.taskType} for ${vNum} into a real Service Request.`
       );
 
       // Log CloudTrail Event

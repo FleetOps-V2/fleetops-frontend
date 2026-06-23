@@ -52,7 +52,7 @@ const Dashboard = () => {
       }
       if (insuranceAlarmsPublished === 0 && serviceAlarmsPublished === 0) {
         pushNotification('success', 'Fleet Health: OK',
-          'EventBridge cron check complete — 0 exceptions found.', 'Amazon SNS');
+          'No alarms found — all vehicles are within safe thresholds.');
       }
     } catch (err) {
       pushNotification('danger', 'Broadcast Failed',

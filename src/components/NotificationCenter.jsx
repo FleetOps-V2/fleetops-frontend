@@ -1,28 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bell, MailOpen, ShieldAlert, AlertTriangle, Info, CheckCircle } from 'lucide-react';
 
-/**
- * NotificationCenter — In-app notification inbox.
- *
- * Business Requirement:
- *   Operations team needs to be alerted when:
- *   - Insurance expires within 30 days
- *   - Vehicle is overdue for service
- *   - A service request transitions state
- *
- * AWS Mapping:
- *   EventBridge rule → Lambda → SNS Topic → Email/SMS
- *   SNS delivers to subscribed email/SMS channels. This inbox
- *   mirrors the same events as in-app notifications.
- *
- * Usage:
- *   Dispatch a global event from anywhere:
- *   window.dispatchEvent(new CustomEvent('fleetops-notification', {
- *     detail: { type: 'warning', title: '...', body: '...' }
- *   }));
- */
-
-const STORAGE_KEY = 'fleetops_sns_inbox';
+const STORAGE_KEY = 'fleetops_notifications';
 const MAX = 50;
 
 function load() {
@@ -47,7 +26,7 @@ const TYPE_ICONS = {
   success: <CheckCircle size={14} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '4px', color: 'var(--accent-success)' }} />
 };
 
-export function pushNotification(type, title, body, source = 'SNS') {
+export function pushNotification(type, title, body, source = 'FleetOps') {
   const item = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2),
     type, title, body, source,
@@ -103,7 +82,7 @@ export default function NotificationCenter() {
           border: unread > 0 ? '1px solid rgba(245,158,11,0.3)' : '1px solid transparent',
           borderRadius: '8px', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}
-        title="SNS Notification Inbox"
+        title="Notifications"
       >
         <Bell size={18} strokeWidth={2} className={unread > 0 ? "spin-icon" : ""} />
         {unread > 0 && (
@@ -120,8 +99,7 @@ export default function NotificationCenter() {
             background: 'var(--bg-elevated)',
           }}>
             <div>
-              <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>SNS Inbox</span>
-              <span className="aws-badge" style={{ marginLeft: '0.5rem', fontSize: '0.65rem' }}>Amazon SNS</span>
+              <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Notifications</span>
             </div>
             <button onClick={clearAll} style={{ background: 'none', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
               Clear all
