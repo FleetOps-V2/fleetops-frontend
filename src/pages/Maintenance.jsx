@@ -620,12 +620,14 @@ const Maintenance = () => {
                       <span style={{ fontSize: '0.7rem', fontFamily: 'monospace' }}>{photo.uploaderNode}</span>
                     </div>
                     <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '4px' }}>
-                      📸 {photo.filename}
+                      <a href={`/api/media/file/${photo.filename}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-primary)', textDecoration: 'none' }}>
+                        📸 {photo.filename}
+                      </a>
                     </div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                       Vehicle: <strong>{photo.vehicleNum}</strong><br/>
                       Size: {photo.size}<br/>
-                      Path: <span style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'var(--accent-primary)' }}>{photo.mountPoint}/{photo.filename}</span>
+                      Path: <a href={`/api/media/file/${photo.filename}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.68rem', color: 'var(--accent-primary)' }}>{photo.mountPoint}/{photo.filename}</a>
                     </div>
                     <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', marginTop: '8px', paddingTop: '6px', fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
                       <span>POSIX lock: None</span>
